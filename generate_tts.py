@@ -67,6 +67,11 @@ async def synthesize(text: str, voice: str, out_wav: Path,
     mp3.unlink(missing_ok=True)
 
 
+def _voice_variants(voice: str) -> list:
+    """Multilingual voices ignore pitch/rate — only generate the neutral variant."""
+    return VARIANTS[:1] if "Multilingual" in voice else VARIANTS
+
+
 async def build_tts_corpus(tts_dir: Path, overwrite: bool = False) -> None:
     # jobs: (text, voice, rate, pitch, out_path)
     jobs = []
@@ -74,15 +79,14 @@ async def build_tts_corpus(tts_dir: Path, overwrite: bool = False) -> None:
         for concept, words in KEYWORDS[lang].items():
             for word in words:
                 for voice in VOICES[lang]:
-                    for vi, (rate, pitch) in enumerate(VARIANTS):
-                        # Variant 0 keeps the original filename for backward compat.
+                    for vi, (rate, pitch) in enumerate(_voice_variants(voice)):
                         suffix = f"__v{vi}" if vi > 0 else ""
                         out = tts_dir / lang / concept / f"{slug(word)}__{voice}{suffix}.wav"
                         out.parent.mkdir(parents=True, exist_ok=True)
                         jobs.append((word, voice, rate, pitch, out))
         for word in UNKNOWN_WORDS[lang]:
             for voice in VOICES[lang]:
-                for vi, (rate, pitch) in enumerate(VARIANTS):
+                for vi, (rate, pitch) in enumerate(_voice_variants(voice)):
                     suffix = f"__v{vi}" if vi > 0 else ""
                     out = tts_dir / lang / "unknown" / f"{slug(word)}__{voice}{suffix}.wav"
                     out.parent.mkdir(parents=True, exist_ok=True)

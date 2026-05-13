@@ -6,13 +6,14 @@ Edit here; changes propagate everywhere automatically.
 
 VOICES = {
     "en": ["en-US-AriaNeural", "en-US-GuyNeural", "en-US-JennyNeural",
-           "en-US-AndrewMultilingualNeural", "en-US-EmmaMultilingualNeural",
+           "en-US-AndrewNeural", "en-US-AndrewMultilingualNeural",
+           "en-US-EmmaNeural", "en-US-EmmaMultilingualNeural",
            "en-GB-RyanNeural", "en-GB-SoniaNeural", "en-GB-ThomasNeural",
-           "en-AU-WilliamNeural", "en-AU-NatashaNeural",
+           "en-AU-NatashaNeural", "en-AU-WilliamMultilingualNeural",
            "en-IN-NeerjaNeural", "en-CA-ClaraNeural"],
     "de": ["de-DE-KatjaNeural", "de-DE-ConradNeural", "de-DE-AmalaNeural",
-           "de-DE-KillianNeural", "de-DE-MajaNeural", "de-DE-BerndNeural",
-           "de-DE-FlorianMultilingualNeural",
+           "de-DE-KillianNeural",
+           "de-DE-FlorianMultilingualNeural", "de-DE-SeraphinaMultilingualNeural",
            "de-AT-IngridNeural", "de-AT-JonasNeural",
            "de-CH-LeniNeural", "de-CH-JanNeural"],
     "tr": ["tr-TR-AhmetNeural", "tr-TR-EmelNeural"],
@@ -21,10 +22,11 @@ VOICES = {
            "ar-DZ-AminaNeural", "ar-MA-MounaNeural",
            "ar-KW-FahedNeural", "ar-KW-NouraNeural",
            "ar-LB-RamiNeural", "ar-LB-LaylaNeural"],
-    "fr": ["fr-FR-DeniseNeural", "fr-FR-HenriNeural",
+    "fr": ["fr-FR-DeniseNeural", "fr-FR-HenriNeural", "fr-FR-EloiseNeural",
            "fr-FR-RemyMultilingualNeural", "fr-FR-VivienneMultilingualNeural",
-           "fr-CA-SylvieNeural", "fr-CA-JeanNeural",
-           "fr-CH-ArianeNeural", "fr-BE-CharlineNeural", "fr-BE-GerardNeural"],
+           "fr-CA-SylvieNeural", "fr-CA-JeanNeural", "fr-CA-AntoineNeural",
+           "fr-CH-ArianeNeural", "fr-CH-FabriceNeural",
+           "fr-BE-CharlineNeural", "fr-BE-GerardNeural"],
     "fa": ["fa-IR-DilaraNeural", "fa-IR-FaridNeural"],
 }
 
