@@ -13,10 +13,11 @@ Dataset layout on HF:
     data/opus/{lang}/{split}/audio/{n}.tar.gz   (n = 0, 1, 2, …)
 
 Output layout:
-    <root>/mswc/{lang}/clip_NNNNN.wav
+    <root>/mswc/{lang}/data.pt     # {'wavs': FloatTensor(N, 1, 16000)}
+    <root>/mswc/{lang}/meta.json   # {'clips': N, 'split': str}
 
 Usage:
-    pip install huggingface_hub soundfile torchaudio
+    pip install huggingface_hub torchaudio
     python fetch_mswc.py --root ./kws_data
     python fetch_mswc.py --root ./kws_data --per-lang 200 --langs en de
 """
@@ -37,7 +38,9 @@ AUDIO_EXTS  = {".opus", ".wav", ".flac", ".mp3"}
 
 
 def _decode(audio_bytes: bytes, suffix: str = ".opus") -> np.ndarray:
+    """Decode audio bytes to a float32 numpy array of shape (16000,)."""
     import torchaudio
+    import torch.nn.functional as F
 
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         tmp.write(audio_bytes)
@@ -47,6 +50,11 @@ def _decode(audio_bytes: bytes, suffix: str = ".opus") -> np.ndarray:
         wav = wav.mean(0)
         if sr != SAMPLE_RATE:
             wav = torchaudio.functional.resample(wav, sr, SAMPLE_RATE)
+        n = wav.shape[-1]
+        if n >= SAMPLE_RATE:
+            wav = wav[:SAMPLE_RATE]
+        else:
+            wav = F.pad(wav, (0, SAMPLE_RATE - n))
         return wav.numpy().astype(np.float32)
     finally:
         os.unlink(tmp_path)
@@ -54,18 +62,17 @@ def _decode(audio_bytes: bytes, suffix: str = ".opus") -> np.ndarray:
 
 def fetch_lang(lang: str, out_dir: Path, per_lang: int, split: str) -> None:
     from huggingface_hub import HfFileSystem
-    import soundfile as sf
+    import torch
 
     out_dir.mkdir(parents=True, exist_ok=True)
     meta_path = out_dir / "meta.json"
+    data_path = out_dir / "data.pt"
+
     if meta_path.exists():
         meta = json.loads(meta_path.read_text())
         if meta.get("clips", 0) >= per_lang:
             print(f"  [{lang}] already complete ({meta['clips']} clips, split={meta.get('split')}) — skipping")
             return
-        count = meta.get("clips", 0)
-    else:
-        count = sum(1 for _ in out_dir.glob("clip_*.wav"))
 
     fs = HfFileSystem()
     shard_glob = f"{HF_REPO}/data/opus/{lang}/{split}/audio/*.tar.gz"
@@ -77,24 +84,24 @@ def fetch_lang(lang: str, out_dir: Path, per_lang: int, split: str) -> None:
         print(f"  [{lang}] no shards found at {shard_glob}")
         return
 
-    print(f"  [{lang}] {count}/{per_lang} clips present, "
-          f"{len(shards)} shard(s) available")
+    print(f"  [{lang}] fetching up to {per_lang} clips from {len(shards)} shard(s)")
+
+    tensors = []
+    errors  = 0
 
     for shard_path in shards:
-        if count >= per_lang:
+        if len(tensors) >= per_lang:
             break
 
         shard_name = Path(shard_path).name
         print(f"    [{lang}] streaming {shard_name} ...", end=" ", flush=True)
-        found = 0
-        errors = 0
+        found_in_shard = 0
+
         try:
-            # r|gz = streaming (pipe) mode: reads sequentially, no seeking.
-            # We never download more bytes than we actually process.
             with fs.open(shard_path, "rb") as fobj:
                 with tarfile.open(fileobj=fobj, mode="r|gz") as tar:
                     for member in tar:
-                        if count >= per_lang:
+                        if len(tensors) >= per_lang:
                             break
                         if not member.isfile():
                             continue
@@ -105,25 +112,26 @@ def fetch_lang(lang: str, out_dir: Path, per_lang: int, split: str) -> None:
                             fobj_member = tar.extractfile(member)
                             if fobj_member is None:
                                 continue
-                            data = fobj_member.read()
-                            arr  = _decode(data, ext)
+                            arr = _decode(fobj_member.read(), ext)
+                            tensors.append(arr)
+                            found_in_shard += 1
                         except Exception:
                             errors += 1
                             continue
-                        sf.write(
-                            str(out_dir / f"clip_{count:05d}.wav"),
-                            arr, SAMPLE_RATE, subtype="PCM_16",
-                        )
-                        count += 1
-                        found += 1
         except Exception as e:
             print(f"\n    [{lang}] shard error: {e}")
             continue
 
-        print(f"extracted {found}  errors {errors}  (total {count}/{per_lang})")
+        print(f"extracted {found_in_shard}  errors {errors}  (total {len(tensors)}/{per_lang})")
+
+    count = len(tensors)
+    if count > 0:
+        # (N, 1, 16000) — channel dim matches load_wav() in the notebook
+        wavs = torch.from_numpy(np.stack(tensors)).unsqueeze(1)
+        torch.save({"wavs": wavs}, data_path)
 
     meta_path.write_text(json.dumps({"clips": count, "split": split}))
-    print(f"  [{lang}] done — {count} clips saved to {out_dir}")
+    print(f"  [{lang}] done — {count} clips saved to {data_path}")
 
 
 def main() -> None:
@@ -140,7 +148,7 @@ def main() -> None:
         from huggingface_hub import HfFileSystem  # noqa: F401
     except ImportError as e:
         raise SystemExit(
-            "Install:  pip install huggingface_hub soundfile torchaudio"
+            "Install:  pip install huggingface_hub torchaudio"
         ) from e
 
     mswc_dir = args.root / "mswc"
