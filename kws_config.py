@@ -27,7 +27,6 @@ VOICES = {
            "fr-CA-SylvieNeural", "fr-CA-JeanNeural", "fr-CA-AntoineNeural",
            "fr-CH-ArianeNeural", "fr-CH-FabriceNeural",
            "fr-BE-CharlineNeural", "fr-BE-GerardNeural"],
-    "fa": ["fa-IR-DilaraNeural", "fa-IR-FaridNeural"],
 }
 
 KEYWORDS = {
@@ -36,7 +35,6 @@ KEYWORDS = {
     "tr": {"activate": ["etkinleştir"], "deactivate": ["kapat"],         "play": ["oynat"],     "stop": ["dur"]},
     "ar": {"activate": ["فعّل"],         "deactivate": ["عطّل"],           "play": ["شغّل"],       "stop": ["أوقف"]},
     "fr": {"activate": ["activer"],     "deactivate": ["désactiver"],    "play": ["lancer"],    "stop": ["arrêter"]},
-    "fa": {"activate": ["فعال کن"],      "deactivate": ["غیرفعال کن"],    "play": ["پخش کن"],    "stop": ["متوقف کن"]},
 }
 
 UNKNOWN_WORDS = {
@@ -45,7 +43,6 @@ UNKNOWN_WORDS = {
     "tr": ["kaydet", "iptal", "başlat", "seç", "aç", "geç"],
     "ar": ["سجّل", "ألغِ", "ابدأ", "اختر", "افتح", "تجاوز"],
     "fr": ["enregistrer", "annuler", "démarrer", "sélectionner", "ouvrir", "ignorer"],
-    "fa": ["ضبط کن", "لغو کن", "شروع کن", "انتخاب کن", "باز کن", "رد کن"],
 }
 
 # Pitch/rate variants synthesised per (word, voice) pair.

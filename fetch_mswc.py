@@ -31,7 +31,7 @@ from pathlib import Path
 import numpy as np
 
 SAMPLE_RATE = 16_000
-LANGS       = ["en", "de", "tr", "ar", "fr", "fa"]
+LANGS       = ["en", "de", "tr", "ar", "fr"]
 HF_REPO     = "datasets/MLCommons/ml_spoken_words"
 HF_SPLIT    = "train"
 AUDIO_EXTS  = {".opus", ".wav", ".flac", ".mp3"}
