@@ -21,6 +21,7 @@ Usage:
     python fetch_mswc.py --root ./kws_data --per-lang 200 --langs en de
 """
 import argparse
+import json
 import os
 import tarfile
 import tempfile
@@ -56,10 +57,15 @@ def fetch_lang(lang: str, out_dir: Path, per_lang: int, split: str) -> None:
     import soundfile as sf
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    count = len(list(out_dir.glob("clip_*.wav")))
-    if count >= per_lang:
-        print(f"  [{lang}] already complete ({count} clips) — skipping")
-        return
+    meta_path = out_dir / "meta.json"
+    if meta_path.exists():
+        meta = json.loads(meta_path.read_text())
+        if meta.get("clips", 0) >= per_lang:
+            print(f"  [{lang}] already complete ({meta['clips']} clips, split={meta.get('split')}) — skipping")
+            return
+        count = meta.get("clips", 0)
+    else:
+        count = sum(1 for _ in out_dir.glob("clip_*.wav"))
 
     fs = HfFileSystem()
     shard_glob = f"{HF_REPO}/data/opus/{lang}/{split}/audio/*.tar.gz"
@@ -116,6 +122,7 @@ def fetch_lang(lang: str, out_dir: Path, per_lang: int, split: str) -> None:
 
         print(f"extracted {found}  errors {errors}  (total {count}/{per_lang})")
 
+    meta_path.write_text(json.dumps({"clips": count, "split": split}))
     print(f"  [{lang}] done — {count} clips saved to {out_dir}")
 
 
