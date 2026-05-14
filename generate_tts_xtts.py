@@ -12,7 +12,7 @@ After running this script, re-run the notebook's `pack_tts_bundles(...,
 overwrite=True)` so the new files are picked up by the .pt bundle.
 
 Usage:
-    pip install TTS soundfile librosa numpy
+    pip install coqui-tts soundfile librosa numpy   # maintained fork; supports Python 3.10+
     python generate_tts_xtts.py --root /content/kws_data
     python generate_tts_xtts.py --root /content/kws_data --langs tr en
 """
