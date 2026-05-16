@@ -1,0 +1,15 @@
+﻿=== CURRENT keyword counts ===
+  en: yes:3316, no:0, hello:301, stop:2398, go:0, up:0, down:8701, left:5608, right:7558
+  de: ja:0, nein:1531, hallo:121, stopp:31, oben:499, unten:313
+  tr: evet:37, hayir:0, merhaba:0, selam:0, dur:0, git:0
+  ar: نعم:44, لا:0, مرحبا:0, سلام:0, قف:0
+  fr: oui:2544, non:3439, bonjour:121, arrete:0, haut:810, bas:1139
+  fa: بله:599, نه:0, سلام:562, برو:654
+
+=== NUMBER word counts ===
+  en: one:32422, two:23105, three:11985, four:7182, five:6445, six:4812, seven:4239, eight:3389, nine:3243, ten:2165
+  de: eins:1477, zwei:6469, drei:4423, vier:3122, funf:0, sechs:2076, sieben:1588, acht:1870, neun:1307, zehn:1076
+  tr: bir:2760, iki:1096, uc:0, dort:0, bes:0, alti:0, yedi:338, sekiz:271, dokuz:287, on:0
+  ar: واحد:68, اثنان:0, ثلاثة:40, أربعة:23, خمسة:25, ستة:18, سبعة:16, ثمانية:13, تسعة:19, عشرة:22
+  fr: zero:0, un:0, deux:17355, trois:10686, quatre:12957, cinq:4276, six:6108, sept:6738, huit:6354, neuf:5208, dix:7426
+  fa: یک:0, دو:0, سه:0, چهار:512, پنج:1126, شش:0, هفت:389, هشت:447, نه:0, ده:0

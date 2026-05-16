@@ -1,0 +1,32 @@
+﻿
+=== question_words ===
+  en: who:12017  what:37490  when:17253  where:10024  how:16045  why:8210
+  de: wer:3839  was:11535  wann:886  wo:0  wie:14812  warum:1546
+  tr: kim:55  ne:0  ne zaman:0  nerede:32  nasıl:269  neden:112
+  ar: من:0  ماذا:149  متى:121  أين:140  كيف:107  لماذا:52
+  fr: qui:11553  quoi:791  quand:1849  où:0  comment:1221  pourquoi:1108
+  fa: که:0  چه:0  کی:0  کجا:3261  چطور:2078  چرا:3130
+
+=== world_knowledge ===
+  en: king:2908  war:4961  city:7818  world:6826  year:6616  born:5766  died:2274
+  de: könig:378  krieg:582  stadt:3483  welt:1174  jahr:2156  geboren:538  gestorben:70
+  tr: kral:0  savaş:37  şehir:20  dünya:46  yıl:329  doğdu:0  öldü:14
+  ar: ملك:5  حرب:0  مدينة:9  عالم:0  سنة:23  ولد:29  توفي:0
+  fr: roi:987  guerre:2049  ville:3709  monde:1818  année:1278  né:0  mort:1425
+  fa: پادشاه:224  جنگ:221  شهر:1032  جهان:615  سال:1321  زاده:77  درگذشت:0
+
+=== time_space ===
+  en: north:3700  south:3741  east:2771  west:2755  old:9896  new:12813  first:15360  last:4895
+  de: norden:428  süden:356  osten:409  westen:330  alt:653  neu:644  erste:1813  letzte:1298
+  tr: kuzey:8  güney:7  doğu:0  batı:11  eski:55  yeni:349  ilk:168  son:145
+  ar: شمال:0  جنوب:0  شرق:0  غرب:0  قديم:0  جديد:17  أول:0  أخير:0
+  fr: nord:2224  sud:2257  est:74985  ouest:880  ancien:545  nouveau:1385  premier:3074  dernier:1377
+  fa: شمال:81  جنوب:92  شرق:30  غرب:5  قدیم:56  جدید:720  اول:885  آخر:293
+
+=== sentiment ===
+  en: good:9711  bad:1989  new:12813  old:9896  great:4253  small:4696  big:2303  long:5732
+  de: gut:3631  schlecht:776  neu:644  alt:653  groß:570  klein:269  lang:842  kurz:1560
+  tr: iyi:200  kötü:37  yeni:349  eski:55  büyük:266  küçük:25  uzun:83  kısa:46
+  ar: جيد:11  سيء:0  جديد:17  قديم:0  كبير:18  صغير:12  طويل:9  قصير:0
+  fr: bon:1352  mauvais:263  nouveau:1385  ancien:545  grand:2587  petit:1613  long:869  court:320
+  fa: خوب:3936  بد:0  جدید:720  قدیمی:199  بزرگ:944  کوچک:377  طولانی:251  کوتاه:421

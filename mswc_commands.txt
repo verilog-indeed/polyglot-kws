@@ -1,0 +1,73 @@
+﻿en:
+  activate: 51
+  deactivate: 0
+  enable: 68
+  disable: 11
+  start: 2132
+  stop: 2398
+  launch: 313
+  cancel: 44
+  confirm: 50
+  select: 136
+  delete: 110
+  record: 1111
+  play: 3850
+  pause: 124
+de:
+  aktivieren: 32
+  deaktivieren: 21
+  aktiviert: 61
+  deaktiviert: 85
+  starten: 180
+  stoppen: 32
+  starten: 180
+  abbrechen: 22
+  bestätigen: 187
+  auswählen: 58
+  löschen: 242
+  aufnehmen: 108
+  abspielen: 55
+tr:
+  etkinleştir: 0
+  devre dışı: 0
+  başlat: 0
+  durdur: 0
+  iptal: 7
+  onayla: 0
+  seç: 0
+  sil: 0
+  kaydet: 0
+  oynat: 0
+ar:
+  تفعيل: 0
+  تعطيل: 0
+  تشغيل: 0
+  إيقاف: 0
+  إلغاء: 0
+  تأكيد: 0
+  اختيار: 0
+  حذف: 0
+  تسجيل: 0
+  تشغيل: 0
+fr:
+  activer: 0
+  désactiver: 0
+  démarrer: 22
+  arrêter: 115
+  annuler: 10
+  confirmer: 35
+  sélectionner: 9
+  supprimer: 177
+  enregistrer: 23
+  lancer: 132
+fa:
+  فعال: 28
+  غیرفعال: 0
+  شروع: 1099
+  توقف: 255
+  لغو: 0
+  تأیید: 39
+  انتخاب: 411
+  حذف: 60
+  ضبط: 56
+  پخش: 52
