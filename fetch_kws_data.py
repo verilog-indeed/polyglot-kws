@@ -133,25 +133,37 @@ def _download_shard(lang: str, shard_idx: int, shard_dir: Path, split: str) -> P
 # ── Metadata helpers ──────────────────────────────────────────────────────────
 def build_inventory(meta: dict, languages: list, top_k: int,
                     n_heldout: int, min_chars: int = 3) -> dict:
-    """Build keyword inventory from metadata wordcounts. No shard download needed."""
+    """
+    Build keyword inventory ranked by exact filename counts from metadata.
+
+    Words are ranked by len(filenames[word]) — the actual number of audio
+    clips in the dataset — not by wordcounts, which aggregate across all splits
+    and can be misleading for low-resource languages.  No hard minimum is
+    enforced here; fetch_lang caps each word at min(samples_per_word, available)
+    so low-resource languages contribute whatever they have.
+    """
     inv = {}
     for lang in languages:
-        entry = meta.get(lang, {})
-        wc = entry.get("wordcounts", {})
+        entry     = meta.get(lang, {})
+        filenames = entry.get("filenames", {})
+
         ranked = sorted(
-            [(w, c) for w, c in wc.items() if len(w) >= min_chars],
+            [(w, len(fnames))
+             for w, fnames in filenames.items()
+             if len(w) >= min_chars],
             key=lambda x: -x[1],
         )
+
         training = [w for w, _ in ranked[:top_k]]
-        heldout  = [w for w, c in ranked[top_k:] if c >= 2][:n_heldout]
+        heldout  = [w for w, _ in ranked[top_k:top_k + n_heldout]]
         inv[lang] = {
             "training": training,
             "heldout":  heldout,
-            "counts":   {w: wc.get(w, 0) for w in training + heldout},
+            "counts":   {w: len(filenames.get(w, [])) for w in training + heldout},
         }
-        train_min = min((wc.get(w, 0) for w in training), default=0)
+        train_min = min((len(filenames.get(w, [])) for w in training), default=0)
         print(f"  [{lang}] {entry.get('language', lang)}: "
-              f"{len(training)} training (min count {train_min}), "
+              f"{len(training)} training (min available: {train_min}), "
               f"{len(heldout)} heldout")
     return inv
 
@@ -199,8 +211,18 @@ def fetch_lang(lang: str, training_words: list, heldout_words: list,
             print(f"  [{lang}/{kind}] all {len(target_words)} words cached — skipping")
             continue
 
-        print(f"  [{lang}/{kind}] {len(to_collect)} words to collect "
-              f"(up to {samples_per_word} samples each)")
+        # Per-word target: stop at min(samples_per_word, clips available in metadata).
+        # This prevents fruitless shard scanning for low-resource words.
+        filenames_meta = meta.get(lang, {}).get("filenames", {})
+        word_targets = {
+            w: min(samples_per_word, len(filenames_meta.get(w, [])))
+            for w in to_collect
+        }
+
+        print(f"  [{lang}/{kind}] {len(to_collect)} words to collect")
+        for w, tgt in sorted(word_targets.items(), key=lambda x: -x[1]):
+            avail = len(filenames_meta.get(w, []))
+            print(f"    {w}: target {tgt}  (metadata has {avail})")
 
         # Build O(1) filename→word lookup from metadata
         lookup = _build_lookup(meta, lang, to_collect)
@@ -229,7 +251,6 @@ def fetch_lang(lang: str, training_words: list, heldout_words: list,
                         if Path(member.name).suffix.lower() not in _AUDIO_EXTS:
                             continue
 
-                        # Metadata-based lookup: strip word prefix → base stem
                         stem = Path(member.name).stem
                         idx  = stem.find(_CV_MARKER)
                         if idx < 0:
@@ -238,7 +259,7 @@ def fetch_lang(lang: str, training_words: list, heldout_words: list,
                         word = lookup.get(base)
                         if word is None:
                             continue
-                        if len(buckets[word]) >= samples_per_word:
+                        if len(buckets[word]) >= word_targets[word]:
                             continue
 
                         spec = _decode_member(tar, member, device)
@@ -247,7 +268,7 @@ def fetch_lang(lang: str, training_words: list, heldout_words: list,
 
                         buckets[word].append(spec)
                         found_this_shard += 1
-                        if len(buckets[word]) >= samples_per_word:
+                        if len(buckets[word]) >= word_targets[word]:
                             n_filled += 1
 
                 print(f"{found_this_shard} decoded  ({n_filled}/{len(to_collect)} filled)")
@@ -291,10 +312,11 @@ def main() -> None:
     args = ap.parse_args()
 
     if args.debug:
-        args.langs     = ["en", "de"]
-        args.top_k     = 5
-        args.n_heldout = 2
-        args.samples   = 40
+        args.langs        = ["en", "de"]
+        args.top_k        = 5
+        args.n_heldout    = 2
+        args.samples      = 40
+        args.min_samples  = 10
         print("*** DEBUG MODE — small run, results not meaningful ***")
 
     print(f"Device  : {args.device}")
