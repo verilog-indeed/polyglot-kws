@@ -1,3 +1,10 @@
 kws_data/
-*.pyc
+*.pyc 
+*.npy 
+*.wav
+*.mp3 
+*.opus 
+*.pt
+*.json
+*.png
 kws_cache_debug/
