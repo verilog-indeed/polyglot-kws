@@ -316,7 +316,6 @@ def main() -> None:
         args.top_k        = 5
         args.n_heldout    = 2
         args.samples      = 40
-        args.min_samples  = 10
         print("*** DEBUG MODE — small run, results not meaningful ***")
 
     print(f"Device  : {args.device}")
