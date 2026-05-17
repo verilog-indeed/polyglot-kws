@@ -111,7 +111,7 @@ def _list_shard_indices(lang: str, split: str) -> list[int]:
         try:
             paths = fs.glob(pattern)
             if paths:
-                return sorted(int(Path(p).stem) for p in paths if Path(p).stem.isdigit())
+                return sorted(int(Path(p).stem.split('.')[0]) for p in paths if Path(p).stem.split('.')[0].isdigit())
         except Exception:
             continue
     return []
