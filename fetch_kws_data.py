@@ -1,5 +1,5 @@
 """
-fetch_kws_data.py — Pre-fetch and cache MSWC keyword audio for multilingual_kws_v2.ipynb
+fetch_kws_data.py — Pre-fetch and cache MSWC keyword audio for multilingual_kws_v*.ipynb
 
 This script runs ONCE before the notebook and does all the heavy HuggingFace I/O:
   1. Reads mswc-metadata.json to build the keyword inventory instantly (no shard scan)
@@ -8,14 +8,27 @@ This script runs ONCE before the notebook and does all the heavy HuggingFace I/O
   4. Decodes audio, computes 49x40 log-mel features, saves float16 .npy to Drive
   5. Saves keyword_inventory.json in the exact format the notebook expects
 
-After this script completes, multilingual_kws_v2.ipynb loads everything from Drive cache
-and never touches HuggingFace.
+After this script completes, the notebook loads everything from Drive cache and
+never touches HuggingFace.
+
+Resume / partial-run semantics (backwards-compatible across script versions):
+  - `.npy` file existence at feats/{kind}/{lang}/{word}.npy is the per-word done marker
+  - Words with an existing .npy are skipped; missing ones are retried
+  - Each .npy is written atomically the moment its bucket reaches the target sample
+    count, so an interrupted run loses at most ONE word's progress per language
+  - The inventory JSON, .npy paths, and dtype/shape are unchanged from earlier versions
+
+Shard cache (RAM safety on Colab):
+  - By default cached at /content/kws_shards on Colab (local SSD, disk-backed) so
+    downloaded tar.gz files don't consume the tmpfs-backed /tmp and balloon RAM
+  - Falls back to tempfile.gettempdir() on non-Colab systems
+  - Override via --shard-dir
 
 Usage (Colab):
   # Upload mswc-metadata.json to your Drive first, then:
   !python fetch_kws_data.py \\
       --metadata /content/drive/MyDrive/mswc-metadata.json \\
-      --root     /content/drive/MyDrive/kws_cache
+      --root     /content/drive/MyDrive/kws_cache_v3
 
 Usage (local / debug):
   python fetch_kws_data.py --metadata ../mswc-metadata.json --root ./kws_cache --debug
@@ -192,100 +205,167 @@ def _cache_path(feats_dir: Path, lang: str, word: str, kind: str) -> Path:
 
 
 # ── Per-language fetch ────────────────────────────────────────────────────────
+def _save_bucket(out_path: Path, frames: list, lang: str, kind: str, word: str,
+                 target: int, partial: bool = False) -> None:
+    """Atomically save a bucket's collected specs to disk. Empty buckets warn but
+    don't write. Partial-bucket saves are marked in the log line so resumes are
+    obvious. We write via a .tmp suffix + rename so an interrupted save can never
+    leave a half-written .npy that the resume logic would mistake for done."""
+    if not frames:
+        print(f"    WARNING: {lang}/{kind}/{word}: 0 samples")
+        return
+    arr = np.stack(frames, axis=0)  # (N, 1, 49, 40) float16
+    tmp = out_path.with_suffix(out_path.suffix + ".tmp")
+    np.save(tmp, arr)
+    tmp.replace(out_path)
+    tag = "saved (partial)" if partial else "saved"
+    print(f"    {tag} {lang}/{kind}/{word}: {arr.shape[0]}/{target} samples")
+
+
 def fetch_lang(lang: str, training_words: list, heldout_words: list,
                meta: dict, feats_dir: Path, shard_dir: Path,
                samples_per_word: int, shard_indices: list,
                device: str, split: str) -> None:
+    """
+    Single-pass fetch over all shards for a language.
 
-    for kind, target_words in [("train", set(training_words)),
-                                ("heldout", set(heldout_words))]:
-        if not target_words:
+    For backwards compatibility:
+      - Pre-existing .npy files (any kind/word) are detected and skipped (resume).
+      - Output paths, dtype, and shape are identical to previous versions.
+      - The combined train+heldout filter saves one pass through gzip-compressed
+        tar shards vs. the previous two passes.
+
+    For partial-run safety:
+      - Each bucket is written to disk atomically (.npy.tmp → rename) the moment
+        its target sample count is reached, then immediately freed from RAM.
+      - If the script is interrupted, at most one in-progress bucket is lost
+        (the one currently being filled). All already-saved .npy files are
+        retained and detected on resume.
+      - End-of-pass saves are also atomic for words that exhausted their
+        available clips without hitting the requested target.
+    """
+    filenames_meta = meta.get(lang, {}).get("filenames", {})
+
+    # Build the UNIFIED lookup and target tables across both kinds.
+    # combined_lookup: base_stem (common_voice_{lang}_{id}) -> (kind, word)
+    # word_targets:    (kind, word) -> int  (the # samples we want for that bucket)
+    # buckets:         (kind, word) -> list of decoded specs (built as we scan)
+    combined_lookup: dict[str, tuple[str, str]] = {}
+    word_targets:    dict[tuple[str, str], int] = {}
+    buckets:         dict[tuple[str, str], list] = {}
+
+    n_skipped_cached = 0
+    n_skipped_nodata = 0
+
+    for kind, words in (("train", training_words), ("heldout", heldout_words)):
+        if not words:
             continue
-
         (feats_dir / kind / lang).mkdir(parents=True, exist_ok=True)
+        for word in words:
+            # Resume: existing .npy = already done
+            if _cache_path(feats_dir, lang, word, kind).exists():
+                n_skipped_cached += 1
+                continue
+            target = min(samples_per_word, len(filenames_meta.get(word, [])))
+            if target == 0:
+                n_skipped_nodata += 1
+                continue
+            word_targets[(kind, word)] = target
+            buckets[(kind, word)]      = []
+            for fname in filenames_meta.get(word, []):
+                base = Path(fname).stem   # 'common_voice_{lang}_{id}'
+                combined_lookup[base] = (kind, word)
 
-        # Resume: skip words that already have a cache file
-        to_collect = {w for w in target_words
-                      if not _cache_path(feats_dir, lang, w, kind).exists()}
-        if not to_collect:
-            print(f"  [{lang}/{kind}] all {len(target_words)} words cached — skipping")
+    n_to_collect = len(buckets)
+    n_total_words = (len(training_words) if training_words else 0) + \
+                    (len(heldout_words)  if heldout_words  else 0)
+    print(f"  [{lang}] cached: {n_skipped_cached}/{n_total_words}, "
+          f"no-data: {n_skipped_nodata}, to collect: {n_to_collect}")
+    if n_to_collect == 0:
+        return
+
+    if not combined_lookup:
+        print(f"  [{lang}] WARNING: no filenames in metadata for any target word")
+        return
+
+    # Per-word targets summary (sorted by target desc; useful for sanity)
+    items_sorted = sorted(word_targets.items(), key=lambda x: -x[1])
+    for (kind, word), tgt in items_sorted[:10]:
+        avail = len(filenames_meta.get(word, []))
+        print(f"    {kind}/{word}: target {tgt}  (metadata has {avail})")
+    if len(items_sorted) > 10:
+        print(f"    ... ({len(items_sorted) - 10} more)")
+
+    # Single pass through shards.
+    for shard_idx in shard_indices:
+        if not buckets:        # every bucket has been saved + freed
+            break
+
+        print(f"    [{lang}] downloading shard {shard_idx} ...", end=" ", flush=True)
+        try:
+            local = _download_shard(lang, shard_idx, shard_dir, split)
+        except Exception as exc:
+            print(f"download ERROR: {exc}")
             continue
 
-        # Per-word target: stop at min(samples_per_word, clips available in metadata).
-        # This prevents fruitless shard scanning for low-resource words.
-        filenames_meta = meta.get(lang, {}).get("filenames", {})
-        word_targets = {
-            w: min(samples_per_word, len(filenames_meta.get(w, [])))
-            for w in to_collect
-        }
+        print("reading ...", end=" ", flush=True)
+        found_this_shard = 0
+        completed_this_shard: list[tuple[str, str]] = []
 
-        print(f"  [{lang}/{kind}] {len(to_collect)} words to collect")
-        for w, tgt in sorted(word_targets.items(), key=lambda x: -x[1]):
-            avail = len(filenames_meta.get(w, []))
-            print(f"    {w}: target {tgt}  (metadata has {avail})")
+        try:
+            with tarfile.open(local, "r:gz") as tar:
+                for member in tar:
+                    if not buckets:
+                        break
+                    if not member.isfile():
+                        continue
+                    if Path(member.name).suffix.lower() not in _AUDIO_EXTS:
+                        continue
 
-        # Build O(1) filename→word lookup from metadata
-        lookup = _build_lookup(meta, lang, to_collect)
-        if not lookup:
-            print(f"  [{lang}/{kind}] WARNING: no filenames in metadata for target words")
+                    stem = Path(member.name).stem
+                    idx  = stem.find(_CV_MARKER)
+                    if idx < 0:
+                        continue
+                    base = stem[idx + 1:]
+                    match = combined_lookup.get(base)
+                    if match is None:
+                        continue
+                    key = match           # (kind, word)
+                    if key not in buckets:
+                        continue          # already completed earlier
+                    if len(buckets[key]) >= word_targets[key]:
+                        continue
 
-        buckets  = {w: [] for w in to_collect}
-        n_filled = 0
+                    spec = _decode_member(tar, member, device)
+                    if spec is None:
+                        continue
 
-        for shard_idx in shard_indices:
-            if n_filled >= len(to_collect):
-                break
+                    buckets[key].append(spec)
+                    found_this_shard += 1
 
-            print(f"    [{lang}] downloading shard {shard_idx} ...", end=" ", flush=True)
-            try:
-                local = _download_shard(lang, shard_idx, shard_dir, split)
-                print("reading ...", end=" ", flush=True)
-                found_this_shard = 0
+                    # Atomic save the moment a bucket fills, then free RAM.
+                    if len(buckets[key]) >= word_targets[key]:
+                        kind, word = key
+                        _save_bucket(_cache_path(feats_dir, lang, word, kind),
+                                     buckets[key], lang, kind, word,
+                                     word_targets[key], partial=False)
+                        completed_this_shard.append(key)
+                        del buckets[key]
+        except Exception as exc:
+            print(f"\n    [{lang}] tar-read ERROR on shard {shard_idx}: {exc}")
+            continue
 
-                with tarfile.open(local, "r:gz") as tar:
-                    for member in tar:
-                        if n_filled >= len(to_collect):
-                            break
-                        if not member.isfile():
-                            continue
-                        if Path(member.name).suffix.lower() not in _AUDIO_EXTS:
-                            continue
+        n_remaining = len(buckets)
+        print(f"{found_this_shard} decoded "
+              f"({len(completed_this_shard)} completed; {n_remaining} buckets left)")
 
-                        stem = Path(member.name).stem
-                        idx  = stem.find(_CV_MARKER)
-                        if idx < 0:
-                            continue
-                        base = stem[idx + 1:]   # 'common_voice_{lang}_{id}'
-                        word = lookup.get(base)
-                        if word is None:
-                            continue
-                        if len(buckets[word]) >= word_targets[word]:
-                            continue
-
-                        spec = _decode_member(tar, member, device)
-                        if spec is None:
-                            continue
-
-                        buckets[word].append(spec)
-                        found_this_shard += 1
-                        if len(buckets[word]) >= word_targets[word]:
-                            n_filled += 1
-
-                print(f"{found_this_shard} decoded  ({n_filled}/{len(to_collect)} filled)")
-
-            except Exception as exc:
-                print(f"ERROR: {exc}")
-                continue
-
-        # Save collected buckets — partial buckets (< samples_per_word) are saved too
-        for word, frames in buckets.items():
-            out = _cache_path(feats_dir, lang, word, kind)
-            if frames:
-                arr = np.stack(frames, axis=0)  # (N, 1, 49, 40) float16
-                np.save(out, arr)
-                print(f"    saved {lang}/{kind}/{word}: {arr.shape[0]} samples")
-            else:
-                print(f"    WARNING: {lang}/{kind}/{word}: 0 samples — word not found in any shard")
+    # End-of-pass: save any partial buckets that didn't hit target.
+    # (This happens when a word has fewer clips on HF than the metadata claimed.)
+    for (kind, word), frames in list(buckets.items()):
+        target = word_targets[(kind, word)]
+        _save_bucket(_cache_path(feats_dir, lang, word, kind),
+                     frames, lang, kind, word, target, partial=True)
+        del buckets[(kind, word)]
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
@@ -307,6 +387,11 @@ def main() -> None:
     ap.add_argument("--split",    default="train",
                     help="MSWC split: train / dev / test (default train)")
     ap.add_argument("--device",   default="cuda" if torch.cuda.is_available() else "cpu")
+    ap.add_argument("--shard-dir", type=Path, default=None,
+                    help="Where to cache downloaded tar.gz shards. Defaults to "
+                         "/content/kws_shards on Colab (local SSD, disk-backed), "
+                         "else system temp. The default /tmp on Colab is tmpfs/RAM "
+                         "and balloons memory by tens of GB.")
     ap.add_argument("--debug", action="store_true",
                     help="Small run: 2 langs, top-5 words, 40 samples, 3000-clip scan")
     args = ap.parse_args()
@@ -325,9 +410,17 @@ def main() -> None:
 
     _init_transforms(args.device)
 
-    # Shards cached in /tmp — session-ephemeral, no Drive quota used for raw audio
-    shard_dir = Path(tempfile.gettempdir()) / "kws_shards"
+    # Shard cache: prefer disk-backed storage. On Colab, /tmp is tmpfs (RAM) so
+    # leaving shards there balloons memory. /content is the local SSD on Colab
+    # VMs (separate from /content/drive); plenty of room for cached shards.
+    if args.shard_dir is not None:
+        shard_dir = args.shard_dir
+    elif Path("/content").is_dir():
+        shard_dir = Path("/content/kws_shards")
+    else:
+        shard_dir = Path(tempfile.gettempdir()) / "kws_shards"
     shard_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Shard cache : {shard_dir}")
 
     feats_dir   = args.root / "feats"
     invent_path = args.root / "keyword_inventory.json"
